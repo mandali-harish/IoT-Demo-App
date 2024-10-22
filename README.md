@@ -1,2 +1,2 @@
-# IoT-Demo-App
-Demo on how to build an IoT application using microservices
+# Monitoring Device
+IoT Device Simulation software
