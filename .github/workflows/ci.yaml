@@ -1,0 +1,61 @@
+name: Build App1
+
+on: 
+# we want pull requests so we can build(test) but not push to image registry
+    push:
+        branches:
+            - 'main'
+            - 'develop'
+            - 'master'
+        # only build when important files change
+        paths:
+            - 'app/**'
+            - '.github/workflows/ci.yaml'
+    pull_request:
+        branches:
+            - 'main'
+
+jobs:
+    call-docker-build:
+        name: App Docker Build
+        runs-on: ubuntu-latest
+        steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+        
+        - name: SonarQube Scan
+          uses: sonarsource/sonarqube-scan-action@v1
+          with:
+            projectBaseDir: ./app
+            args: >
+              -Dsonar.organization=iot-org
+              -Dsonar.projectKey=Iot-device
+          env:
+              SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+              SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+        - name: Set up Docker Buildx
+          uses: docker/setup-buildx-action@v1
+        
+        - name: Log in to Docker Hub
+          uses: docker/login-action@v3
+          with:
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_PASSWORD }}
+        
+        - name: Build an image from Dockerfile
+          run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/iotdevice:${{github.run_id}} ./app
+
+        - name: Run Trivy vulnerability scanner
+          uses: aquasecurity/trivy-action@0.20.0
+          with: 
+            image-ref: '${{ secrets.DOCKERHUB_USERNAME }}/iotdevice:${{github.run_id}}'
+            format: 'table'
+            exit-code: '1'
+            ignore-unfixed: true
+            vuln-type: 'os,library'
+            severity: 'CRITICAL,HIGH'
+            cache: 'true'
+      
+        - name: Push image to docker hub
+          run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/iotdevice:${{github.run_id}}
